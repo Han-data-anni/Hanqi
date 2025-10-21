@@ -1,0 +1,271 @@
+---
+title: "DATA2002-pre"
+author: "Group 10"
+date: "2025-10-21"
+output: html_document
+---
+
+# DATA processing
+
+## DATA import and data clean
+
+```{r setup-and-load-packages, include=FALSE}
+
+knitr::opts_chunk$set(
+  echo = TRUE,       
+  message = FALSE,  
+  warning = FALSE  
+)
+
+library(tidyverse)    
+library(visdat)       
+library(patchwork)   
+library(plotly)      
+library(scales)  
+library(ggcorrplot) 
+library(janitor)  
+library(ggplot2)
+library(GGally)
+library(sjPlot) 
+
+```
+
+```{r}
+file_path <- "abalone.data"
+abalone_raw <- read.csv(file_path, header = FALSE)
+
+original_names <- c("Sex", "Length", "Diameter", "Height", 
+                    "Whole weight", "Shucked weight", 
+                    "Viscera weight", "Shell weight", "Rings")
+colnames(abalone_raw) <- original_names
+
+abalone_df <- abalone_raw %>%
+  
+janitor::clean_names() %>%
+  
+  mutate(
+    length = length * 200,
+    diameter = diameter * 200,
+    height = height * 200,
+    whole_weight = whole_weight * 200,
+    shucked_weight = shucked_weight * 200,
+    viscera_weight = viscera_weight * 200,
+    shell_weight = shell_weight * 200
+  ) %>%
+  
+  mutate(age = rings + 1.5)
+
+cat("--- Cleaned and Transformed Data Structure ---\n")
+str(abalone_df)
+
+cat("\n--- Summary of Data in Original Units ---\n")
+summary(abalone_df)
+```
+```{r}
+cat("--- Final Data Structure ---\n")
+str(abalone_df)
+```
+
+```{r}
+vis_miss(abalone_df) +
+  labs(title = "Missing Value Analysis") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# 1. Distribution of the Target Variable: Age
+p1 <- ggplot(abalone_df, aes(x = age)) +
+  geom_histogram(bins = 20, fill = "lightblue", color = "black", alpha = 0.7) +
+  labs(
+    title = "Distribution of Abalone Age",
+    x = "Age (Years)",
+    y = "Count"
+    ) +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# 2. Distributions of Key Predictor Variables
+p2 <- ggplot(abalone_df, aes(x = length)) +
+  geom_histogram(bins = 20, fill = "salmon", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Shell Length", x = "Length (mm)", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p3 <- ggplot(abalone_df, aes(x = whole_weight)) +
+  geom_histogram(bins = 20, fill = "lightgreen", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Whole Weight", x = "Whole Weight (grams)", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p4 <- ggplot(abalone_df, aes(x = shell_weight)) +
+  geom_histogram(bins = 20, fill = "orchid", color = "black", alpha = 0.7) +
+  labs(title = "Distribution of Shell Weight", x = "Shell Weight (grams)", y = "Count") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Arrange plots using patchwork
+(p1 | p2) / (p3 | p4)
+```
+
+```{r}
+# Select key numerical variables for the pairs plot
+numerical_vars <- c("length", "diameter", "height", "whole_weight", "age")
+df_pairs <- abalone_df %>%
+  dplyr::select(all_of(numerical_vars))
+
+# Create the scatterplot matrix using GGally
+p_mat <- ggpairs(
+  df_pairs,
+  lower = list(continuous = wrap("points", alpha = 0.3, size = 0.8, color = "blue")),
+  diag = list(continuous = wrap("densityDiag", alpha = 0.8, fill = "lightblue")),
+  upper = list(continuous = wrap("cor", size = 4))
+) +
+  labs(title = "Relationships Between Age and Physical Measurements") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5, size = 16))
+
+# Print the plot
+p_mat
+```
+
+```{r}
+# Create the boxplot for Age vs. Sex
+ggplot(abalone_df, aes(x = sex, y = age, fill = sex)) +
+  geom_boxplot(color = "gray30", outlier.alpha = 0.4) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Age Distribution by Sex",
+    x = "Sex",
+    y = "Age (Years)"
+    ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "none" # Hide legend as colors are intuitive
+    )
+```
+```{r}
+# Calculate the correlation matrix for all numeric columns
+corr_matrix <- abalone_df %>%
+  select(where(is.numeric)) %>%
+  cor()
+
+# Create the correlation heatmap
+ggcorrplot(
+  corr_matrix,
+  method = "circle",
+  type = "lower",
+  lab = TRUE,
+  lab_size = 3,
+  colors = c("tomato2", "white", "springgreen3")
+  ) +
+  labs(title = "Correlation Heatmap of Abalone Attributes") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+```{r}
+## Model 1 - linear Full model (backward/forward)
+model0 <- lm(age ~ 1, data = abalone_df)          # 空模型，只包含截距
+model1 <- lm(age ~ length + diameter + height + 
+               whole_weight + shucked_weight + 
+               viscera_weight + shell_weight + sex, 
+             data = abalone_df)                   # 全模型，包含所有自变量
+
+summary(model1)   # 查看全模型的系数、显著性和整体拟合情况
+```
+```{r}
+### Model 2 - backward selection model ----
+step.back.aic <- step(model1, direction = "backward", trace = FALSE)
+print(step.back.aic)
+summary(step.back.aic)
+
+```
+
+```{r}
+### Model 3 - forward selection model ----
+step.fwd.aic <- step(model0,
+                     scope = list(lower = model0, upper = model1),
+                     direction = "forward",
+                     trace = FALSE)
+
+print(step.fwd.aic)
+summary(step.fwd.aic)
+
+```
+```{r}
+library(sjPlot)   # install.packages("sjPlot")
+sjPlot::tab_model(
+  step.back.aic,
+  step.fwd.aic,
+  show.ci   = FALSE,
+  show.aic  = TRUE,
+  dv.labels = c("Backward Model", "Forward Model")
+)
+```
+
+下面这串代码到时候看看可不可以删，根据上面代码是建议保留下面这四个变量用于建模，其他变量可删
+```{r}
+keepers_final <- c("diameter", "whole_weight", "shell_weight", "sex")
+
+model_final <- lm(age ~ diameter + whole_weight + shell_weight + sex, data = abalone_df)
+summary(model_final)
+
+```
+hche0268：
+Linear-Linear 模型
+```{r}
+# 根据您的要求，建立 age ~ diameter + whole_weight + sex 的线性模型
+model_linear_selected <- lm(age ~ diameter + whole_weight + sex, data = abalone_df)
+
+# 显示模型摘要
+summary(model_linear_selected)
+```
+Log-Linear 模型 (对 age 进行变换)
+```{r}
+# 建立 log-linear 模型，对因变量 age 进行 log 变换
+model_log_linear <- lm(log(age) ~ diameter + whole_weight + sex, data = abalone_df)
+
+# 显示模型摘要
+summary(model_log_linear)
+```
+比较 Model 4 和 Model 5
+```{r}
+sjPlot::tab_model(
+  model_linear_selected,
+  model_log_linear,
+  show.ci = FALSE,
+  show.aic = TRUE,
+  dv.labels = c("Model 4 (Linear-Linear)", "Model 5 (Log-Linear)"),
+  string.pred = "预测变量",
+  string.est = "估计值"
+)
+```
+
+Log-Linear 模型 (Model 5) 明显更优。
+
+AIC (Akaike Information Criterion): 这是比较这两个模型的最关键指标。
+
+Model 4 (Linear-Linear) 的 AIC 是 19850.584。
+Model 4 （Linear-Linear） 的 AIC 是 19850.584。
+
+Model 5 (Log-Linear) 的 AIC 是 18507.359。
+Model 5 （Log-Linear） 的 AIC 是 18507.359。
+
+变量提升
+whole_weight
+在 Model 4 (Linear-Linear) 中，whole_weight 是完全不显著的 (p = 0.519)。这意味着，在控制了 diameter 和 sex 之后，whole_weight 对 age 没有 线性 预测能力。
+
+但在 Model 5 (Log-Linear) 中，whole_weight 变得高度显著 (p < 0.001)。
+
+这说明对 age 进行 $log$ 变换是非常正确的决定。它很可能纠正了 age 变量的偏态分布（skewness）或异方差性（heteroskedasticity），使得 whole_weight 和 $log(age)$ 之间的（线性）关系被成功地捕捉到了。
+
+sex:
+在 Model 4 中，雄性 (M) 和雌性 (F)（基准组）的差异在 p=0.05 的水平上是边缘显著的 (p = 0.060)。
+
+在 Model 5 中，这种差异变得不显著 (p = 0.159)。这说明在更优的模型（Model 5）中，M 和 F 之间的年龄差异并不明显。
+
+
+ 解读 Model 5 的系数
+whole_weight (-0.00): 系数是一个非常小的负数（虽然显示为-0.00，但 p < 0.001 表明它显著不为零）。这意味着在控制其他变量时，总重量越重，鲍鱼的 $log(age)$ 反而略微 降低。这可能是一个抑制效应（suppressor effect），或者需要更仔细地检查它与 diameter 的多重共线性。
+
+sex [I] (-0.11): Infant (I, 幼体) 的 $log(age)$ 比 Female (F, 雌性) 平均低 0.11。换算成百分比：Infant 的鲍鱼年龄比 Female 大约小 10.4% (即 $e^{-0.11} - 1 \approx -0.104$）。
