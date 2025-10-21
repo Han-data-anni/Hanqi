@@ -211,5 +211,61 @@ model_final <- lm(age ~ diameter + whole_weight + shell_weight + sex, data = aba
 summary(model_final)
 
 ```
+hche0268：
+Linear-Linear 模型
+```{r}
+# 根据您的要求，建立 age ~ diameter + whole_weight + sex 的线性模型
+model_linear_selected <- lm(age ~ diameter + whole_weight + sex, data = abalone_df)
+
+# 显示模型摘要
+summary(model_linear_selected)
+```
+Log-Linear 模型 (对 age 进行变换)
+```{r}
+# 建立 log-linear 模型，对因变量 age 进行 log 变换
+model_log_linear <- lm(log(age) ~ diameter + whole_weight + sex, data = abalone_df)
+
+# 显示模型摘要
+summary(model_log_linear)
+```
+比较 Model 4 和 Model 5
+```{r}
+sjPlot::tab_model(
+  model_linear_selected,
+  model_log_linear,
+  show.ci = FALSE,
+  show.aic = TRUE,
+  dv.labels = c("Model 4 (Linear-Linear)", "Model 5 (Log-Linear)"),
+  string.pred = "预测变量",
+  string.est = "估计值"
+)
+```
+
+Log-Linear 模型 (Model 5) 明显更优。
+
+AIC (Akaike Information Criterion): 这是比较这两个模型的最关键指标。
+
+Model 4 (Linear-Linear) 的 AIC 是 19850.584。
+Model 4 （Linear-Linear） 的 AIC 是 19850.584。
+
+Model 5 (Log-Linear) 的 AIC 是 18507.359。
+Model 5 （Log-Linear） 的 AIC 是 18507.359。
+
+变量提升
+whole_weight
+在 Model 4 (Linear-Linear) 中，whole_weight 是完全不显著的 (p = 0.519)。这意味着，在控制了 diameter 和 sex 之后，whole_weight 对 age 没有 线性 预测能力。
+
+但在 Model 5 (Log-Linear) 中，whole_weight 变得高度显著 (p < 0.001)。
+
+这说明对 age 进行 $log$ 变换是非常正确的决定。它很可能纠正了 age 变量的偏态分布（skewness）或异方差性（heteroskedasticity），使得 whole_weight 和 $log(age)$ 之间的（线性）关系被成功地捕捉到了。
+
+sex:
+在 Model 4 中，雄性 (M) 和雌性 (F)（基准组）的差异在 p=0.05 的水平上是边缘显著的 (p = 0.060)。
+
+在 Model 5 中，这种差异变得不显著 (p = 0.159)。这说明在更优的模型（Model 5）中，M 和 F 之间的年龄差异并不明显。
 
 
+ 解读 Model 5 的系数
+whole_weight (-0.00): 系数是一个非常小的负数（虽然显示为-0.00，但 p < 0.001 表明它显著不为零）。这意味着在控制其他变量时，总重量越重，鲍鱼的 $log(age)$ 反而略微 降低。这可能是一个抑制效应（suppressor effect），或者需要更仔细地检查它与 diameter 的多重共线性。
+
+sex [I] (-0.11): Infant (I, 幼体) 的 $log(age)$ 比 Female (F, 雌性) 平均低 0.11。换算成百分比：Infant 的鲍鱼年龄比 Female 大约小 10.4% (即 $e^{-0.11} - 1 \approx -0.104$）。
